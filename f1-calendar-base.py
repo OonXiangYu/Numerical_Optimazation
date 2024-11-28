@@ -1,5 +1,5 @@
 import unittest
-import math
+from math import radians, sin, cos, sqrt, asin
 import csv
 import random
 import copy
@@ -11,7 +11,7 @@ from deap import base, creator, tools
 # the unit tests to check that the simulation has been implemented correctly
 class UnitTests (unittest.TestCase):
     # this will read in the track locations file and will pick out 5 fields to see if the file has been read correctly
-    def testReadCSV(self):
+    def testReadCSV(self): #done
         # read in the locations file
         rows = readCSVFile('track-locations.csv')
 
@@ -24,7 +24,7 @@ class UnitTests (unittest.TestCase):
     
     # this will test to see if the row conversion works. here we will convert the latitude rwo and will test 5 values
     # as we are dealing with floating point we will use almost equals rather than a direct equality
-    def testRowToFloat(self):
+    def testRowToFloat(self): # done
         # read in the locations file and convert the latitude column to floats
         rows = readCSVFile('track-locations.csv')
         convertRowToFloat(rows, 2)
@@ -48,7 +48,7 @@ class UnitTests (unittest.TestCase):
     
     # this will test to see if the file conversion overall is successful for the track locations
     # it will read in the file and will test a string, float, and int from 2 rows to verify it worked correctly
-    def testReadTrackLocations(self):
+    def testReadTrackLocations(self): #done
         # read in the locations file
         rows = readTrackLocations()
 
@@ -63,7 +63,7 @@ class UnitTests (unittest.TestCase):
         self.assertAlmostEqual(rows[4][23], 24, delta=0.0001)
     
     # tests to see if the race weekends file is read in correctly
-    def testReadRaceWeekends(self):
+    def testReadRaceWeekends(self): #done
         # read in the race weekends file
         weekends = readRaceWeekends()
 
@@ -140,7 +140,39 @@ class UnitTests (unittest.TestCase):
 # - the preseason test will always take place in Bahrain
 # - for the summer shutdown and off season the team will return home
 def calculateSeasonDistance(tracks, weekends, home):
-    pass
+    totalDistance = 0.0
+    currentLocation = home # start point
+    index = 0
+
+    fixedRaces = {9: "Bahrain", 21: "Monaco", 49: "Abu Dhabi"}
+
+    for week in range(1,53): # F1 races weeks
+        if week in weekends:
+            if week in fixedRaces:
+                raceTrack = fixedRaces[week] # Fixed locations
+            else:
+                raceIndex = weekends.index(week)
+                raceTrack = tracks[week]
+
+                for i in range(1,23):
+                        if tracks['GP'][i] == raceTrack: # find the index of the location then we can get then number to apply on track_data
+                            index = i
+
+                totalDistance += haversine(tracks, int(currentLocation), int(index)) 
+                currentLocation = index # now we at race location
+
+            # if double/triper header
+            if week < 52 and weekends[raceIndex + 1] == week + 1:
+                currentLocation = index # remain location
+            else:
+                totalDistance = haversine(tracks, int(currentLocation), int(home))
+                currentLocation = home # back home
+
+    if currentLocation != home:
+        totalDistance += haversine(tracks, currentLocation, home) # team should back home at off season
+
+    return totalDistance
+
 
 # function that will check to see if there is anywhere in our weekends where four races appear in a row. True indicates that we have four in a row
 def checkFourRaceInRow(weekends):
@@ -155,7 +187,13 @@ def checkTemperatureConstraint(tracks, weekends, min, max):
 # the way this is defined is that we have a gap of three weekends between successive races. this will be weeks 31, 32, and 33, they are not
 # permitted to have a race during these weekends
 def checkSummerShutdown(weekends):
-    pass
+    summer = range(27,36) # start of July until end of August
+
+    for startWeek in range(27,33): # need four week to summer shutdown
+        if all(week not in weekends for week in range(startWeek, startWeek + 3)): # four week gap
+            return True
+
+    return False
 
 # will go through the genetic code of this child and will make sure that all the required weekends are in it.
 # it's highly likely that with crossover that there will be weekends missing and others duplicated. we will
@@ -166,7 +204,8 @@ def childGeneticCodeFix(child):
 # function that will take in the set of rows and will convert the given row index into floating point values
 # this assumes the header in the CSV file is still present so it will skip the first column
 def convertRowToFloat(rows, row_index):
-    pass
+    for i in range(len(rows[row_index])):
+        rows[row_index][i] = try_convert(rows[row_index][i]) # convert str to float
 
 # function that will generate a shuffled itinerary. However, this will make sure that the bahrain, abu dhabi, and monaco
 # will retain their fixed weeks in the calendar
@@ -176,7 +215,16 @@ def generateShuffledItinerary(weekends):
 # function that will use the haversine formula to calculate the distance in Km given two latitude/longitude pairs
 # it will take in an index to two rows, and extract the latitude and longitude before the calculation.
 def haversine(rows, location1, location2):
-    pass
+    earthRadius = 6371.0 # Earth Radius
+
+    # Calculate latitude and longtitude
+    lat1, long1 = radians(rows[2][location1]), radians(rows[3][location1])
+    lat2, long2 = radians(rows[2][location2]), radians(rows[3][location2])
+
+    part1 =  sin((lat2 - lat1) / 2) ** 2 + cos(lat1) * cos(lat2) * sin((long2 - long1) / 2) ** 2
+    hvs = 2 * asin(sqrt(part1)) * earthRadius
+
+    return hvs
 
 # function that will give us the index of the lowest temp below min. will return -1 if none found
 def indexHighestTemp(tracks, weekends, max):
@@ -212,12 +260,54 @@ def readCSVFile(file):
 
 # function that will read in the race weekends file and will perform all necessary conversions on it
 def readRaceWeekends():
-    pass
+    raceWeekends = []
+
+    # open the file for reading and give it to the CSV reader
+    csv_file = open('race-weekends.csv')
+    csv_reader = csv.reader(csv_file, delimiter=',')
+
+    next(csv_reader)
+
+    for row in csv_reader:
+        raceWeekends.append(int(row[1]))
+
+    # close the file when reading is finished
+    csv_file.close()
+
+    return raceWeekends
 
 # function that will read the track locations file and will perform all necessary conversions on it.
 # this should also strip out the first column on the left which is the header information for all the rows
 def readTrackLocations():
-    pass
+    rows = []
+
+    # open the file for reading and give it to the CSV reader
+    csv_file = open('track-locations.csv')
+    csv_reader = csv.reader(csv_file, delimiter=',')
+
+    # read in each row and append it to the list of rows except first column.
+    for row in csv_reader:
+        rows.append(row[1:])
+
+    numOfRow = len(rows)
+    numOfCol = len(rows[0])
+
+    for i in range(0,numOfRow):
+         for j in range(0,numOfCol):
+              value = try_convert(rows[i][j]) # convert str to float
+              rows[i][j] = value
+              
+
+    # close the file when reading is finished
+    csv_file.close()
+
+    return rows
+
+def try_convert(value): # try to convert it to float 
+        try:
+            return float(value)
+        except ValueError:
+            return value
 
 # function that performs a roulette wheel randomisation on the two given values and returns the chosen on
 def rouletteWheel(a, b):
