@@ -1,5 +1,5 @@
 import unittest
-from math import radians, sin, cos, sqrt, asin
+import math
 import csv
 import random
 import copy
@@ -11,7 +11,7 @@ from deap import base, creator, tools
 # the unit tests to check that the simulation has been implemented correctly
 class UnitTests (unittest.TestCase):
     # this will read in the track locations file and will pick out 5 fields to see if the file has been read correctly
-    def testReadCSV(self): #done
+    def testReadCSV(self):
         # read in the locations file
         rows = readCSVFile('track-locations.csv')
 
@@ -24,7 +24,7 @@ class UnitTests (unittest.TestCase):
     
     # this will test to see if the row conversion works. here we will convert the latitude rwo and will test 5 values
     # as we are dealing with floating point we will use almost equals rather than a direct equality
-    def testRowToFloat(self): # done
+    def testRowToFloat(self): 
         # read in the locations file and convert the latitude column to floats
         rows = readCSVFile('track-locations.csv')
         convertRowToFloat(rows, 2)
@@ -48,7 +48,7 @@ class UnitTests (unittest.TestCase):
     
     # this will test to see if the file conversion overall is successful for the track locations
     # it will read in the file and will test a string, float, and int from 2 rows to verify it worked correctly
-    def testReadTrackLocations(self): #done
+    def testReadTrackLocations(self): 
         # read in the locations file
         rows = readTrackLocations()
 
@@ -63,7 +63,7 @@ class UnitTests (unittest.TestCase):
         self.assertAlmostEqual(rows[4][23], 24, delta=0.0001)
     
     # tests to see if the race weekends file is read in correctly
-    def testReadRaceWeekends(self): #done
+    def testReadRaceWeekends(self): 
         # read in the race weekends file
         weekends = readRaceWeekends()
 
@@ -140,48 +140,54 @@ class UnitTests (unittest.TestCase):
 # - the preseason test will always take place in Bahrain
 # - for the summer shutdown and off season the team will return home
 def calculateSeasonDistance(tracks, weekends, home):
-    totalDistance = 0.0
-    currentLocation = home # start point
-    index = 0
 
-    fixedRaces = {9: "Bahrain", 21: "Monaco", 49: "Abu Dhabi"}
+    i = 0
+    current = home
+    total = 0
+    j = 0
+    
+    for week in weekends:
+        total  += haversine(tracks, current, i)
+        current = i
 
-    for week in range(1,53): # F1 races weeks
-        if week in weekends:
-            if week in fixedRaces:
-                raceTrack = fixedRaces[week] # Fixed locations
-            else:
-                raceIndex = weekends.index(week)
-                raceTrack = tracks[week]
+        if j + 1 < len(weekends) and weekends[j + 1] == week + 1: # if double/triper header
+            i += 1
+            j += 1
+            continue
+        else:
+            total += haversine(tracks, current, home) 
+            current = home
 
-                for i in range(1,23):
-                        if tracks['GP'][i] == raceTrack: # find the index of the location then we can get then number to apply on track_data
-                            index = i
+        i += 1
+        j += 1
 
-                totalDistance += haversine(tracks, int(currentLocation), int(index)) 
-                currentLocation = index # now we at race location
 
-            # if double/triper header
-            if week < 52 and weekends[raceIndex + 1] == week + 1:
-                currentLocation = index # remain location
-            else:
-                totalDistance = haversine(tracks, int(currentLocation), int(home))
-                currentLocation = home # back home
+    if current != home:
+        total += haversine(tracks, current, home)
+        current = home
 
-    if currentLocation != home:
-        totalDistance += haversine(tracks, currentLocation, home) # team should back home at off season
-
-    return totalDistance
+    return total
 
 
 # function that will check to see if there is anywhere in our weekends where four races appear in a row. True indicates that we have four in a row
 def checkFourRaceInRow(weekends):
-    pass
+    for startWeek in range(1, 48): 
+        if all(week in weekends for week in range(startWeek, startWeek + 4)):  # Four-week gap
+            return True
+    return False
 
 # function that will check to see if the temperature constraint for all races is satisfied. The temperature
 # constraint is that a minimum temperature of min degrees for the month is required for a race to run
 def checkTemperatureConstraint(tracks, weekends, min, max):
-    pass
+    j = 0
+
+    for i in range(23):
+        if tracks[weekends[j] + 4][i] < min or tracks[weekends[j] + 4][i] > max:
+            return False
+        else:
+            j += 1        
+
+    return True
 
 # function that will check to see if there is a four week gap anywhere in july and august. we will need this for the summer shutdown.
 # the way this is defined is that we have a gap of three weekends between successive races. this will be weeks 31, 32, and 33, they are not
@@ -207,6 +213,12 @@ def convertRowToFloat(rows, row_index):
     for i in range(len(rows[row_index])):
         rows[row_index][i] = try_convert(rows[row_index][i]) # convert str to float
 
+def try_convert(value): # try to convert it to float 
+        try:
+            return float(value)
+        except ValueError:
+            return value
+
 # function that will generate a shuffled itinerary. However, this will make sure that the bahrain, abu dhabi, and monaco
 # will retain their fixed weeks in the calendar
 def generateShuffledItinerary(weekends):
@@ -218,15 +230,21 @@ def haversine(rows, location1, location2):
     earthRadius = 6371.0 # Earth Radius
 
     # Calculate latitude and longtitude
-    lat1, long1 = radians(rows[2][location1]), radians(rows[3][location1])
-    lat2, long2 = radians(rows[2][location2]), radians(rows[3][location2])
+    lat1 = math.radians(rows[2][location1])
+    long1 = math.radians(rows[3][location1])
+    lat2 = math.radians(rows[2][location2])
+    long2 = math.radians(rows[3][location2])
 
-    part1 =  sin((lat2 - lat1) / 2) ** 2 + cos(lat1) * cos(lat2) * sin((long2 - long1) / 2) ** 2
-    hvs = 2 * asin(sqrt(part1)) * earthRadius
+    delta_lat = lat2 - lat1
+    delta_long = long2 - long1
+
+    a = math.sin(delta_lat / 2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(delta_long / 2)**2
+    c = 2 *  math.asin(math.sqrt(a))
+    hvs = earthRadius * c
 
     return hvs
 
-# function that will give us the index of the lowest temp below min. will return -1 if none found
+# function that will give us the index of the highest temp above max. will return -1 if none found
 def indexHighestTemp(tracks, weekends, max):
     pass
 
@@ -293,21 +311,12 @@ def readTrackLocations():
     numOfCol = len(rows[0])
 
     for i in range(0,numOfRow):
-         for j in range(0,numOfCol):
-              value = try_convert(rows[i][j]) # convert str to float
-              rows[i][j] = value
+        convertRowToFloat(rows, i)
               
-
     # close the file when reading is finished
     csv_file.close()
 
     return rows
-
-def try_convert(value): # try to convert it to float 
-        try:
-            return float(value)
-        except ValueError:
-            return value
 
 # function that performs a roulette wheel randomisation on the two given values and returns the chosen on
 def rouletteWheel(a, b):
@@ -331,9 +340,9 @@ if __name__ == '__main__':
     unittest.main()
 
     # just to check that the itinerary printing mechanism works. we will assume that silverstone is the home track for this
-    #weekends = readRaceWeekends()
+    weekends = readRaceWeekends()
     #print(generateShuffledItinerary(weekends))
-    #tracks = readTrackLocations()
+    tracks = readTrackLocations()
     #printItinerary(tracks, weekends, 11)
 
     # run the cases for simulated annealing
