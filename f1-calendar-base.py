@@ -222,8 +222,23 @@ def try_convert(value): # try to convert it to float
 # function that will generate a shuffled itinerary. However, this will make sure that the bahrain, abu dhabi, and monaco
 # will retain their fixed weeks in the calendar
 def generateShuffledItinerary(weekends):
-    pass
 
+    weekends.clear() # clear original week
+
+    fixedWeek = {9,21,49}
+
+    allWeek = [week for week in range(9,50) if week not in fixedWeek]
+
+    weekends = list(fixedWeek)
+
+    while len(weekends) < 22:
+        week = random.choice(allWeek)
+        weekends.append(week)
+        allWeek.remove(week)
+
+    return sorted(weekends)
+
+    
 # function that will use the haversine formula to calculate the distance in Km given two latitude/longitude pairs
 # it will take in an index to two rows, and extract the latitude and longitude before the calculation.
 def haversine(rows, location1, location2):
@@ -254,7 +269,34 @@ def indexLowestTemp(tracks, weekends, min):
 
 # prints out the itinerary that was generated on a weekend by weekend basis starting from the preaseason test
 def printItinerary(tracks, weekends, home):
-    pass
+
+    i = -1
+    current = home
+
+    allWeek = [None] * 52
+
+    for week in weekends:
+        if len(allWeek) > week:
+            allWeek[week - 1] = week
+
+    print(allWeek)
+
+    for week in allWeek:
+        if week == None:
+            if current == home:
+                print("Staying at home thus no travel this weekend")
+            else:
+                print(f"Travelling home from {tracks[0][current]}")
+                current = home
+        else:
+            if current == home:
+                i+=1
+                current = i
+                print(f"Travelling from home to {tracks[0][current]}. Race temperature is expected to be {tracks[int(week + 4)][current]} degrees")
+            else:
+                i+=1
+                current = i
+                print(f"Travelling directly from {tracks[0][current-1]} to {tracks[0][current]}. Race temperature is expected to be {tracks[int(week + 4)][current]} degrees")
 
 # function that will take in the given CSV file and will read in its entire contents
 # and return a list of lists
@@ -323,8 +365,27 @@ def rouletteWheel(a, b):
     pass
 
 # function that will run the simulated annealing case for shortening the distance seperately for both silverstone and monza
-def SAcases():
-    pass
+class SAcases(Annealer):
+    def __init__(self, cities, tracks, weekend, home):
+        self.cities = cities
+        self.tracks = tracks
+        self.weekend = weekend
+        self.home = home
+        super(SAcases,self).__init__(cities)
+
+    def move(self):
+        a = random.randint(0, len(self.state) - 1)
+        b = random.randint(0, len(self.state) - 1)
+        temp = self.state[a]
+        self.state[a] = self.state[b]
+        self.state[b] = temp
+
+    def energy(self):
+        # Reorder `self.tracks` columns according to `self.state`
+        reordered_tracks = [[row[i] for i in self.state] for row in self.tracks]
+
+        total = calculateSeasonDistance(reordered_tracks, self.weekend, self.home)
+        return total
 
 # function that will run the genetic algorithms cases for all four situations
 def GAcases():
@@ -337,16 +398,28 @@ def PSOcases():
 if __name__ == '__main__':
     # uncomment this run all the unit tests. when you have satisfied all the unit tests you will have a working simulation
     # you can then comment this out and move onto your SA and GA solutions
-    unittest.main()
+    #unittest.main()
 
     # just to check that the itinerary printing mechanism works. we will assume that silverstone is the home track for this
-    weekends = readRaceWeekends()
-    #print(generateShuffledItinerary(weekends))
+    race = readRaceWeekends()
+    #race = generateShuffledItinerary(weekends)
+    #print(race)
     tracks = readTrackLocations()
-    #printItinerary(tracks, weekends, 11)
+    #printItinerary(tracks, race, 11)
+    cities = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]
 
     # run the cases for simulated annealing
     #SAcases()
+    SA = SAcases( cities, tracks, race, 11)
+    SA.steps = 100000
+
+    state, e =  SA.anneal()
+
+    print("Best route is :")
+    for i in range(0, len(state)):
+        print(tracks[0][state[i]])
+
+    print("total : ", e)
 
     # run the cases for genetic algorithms
     #GAcases()
