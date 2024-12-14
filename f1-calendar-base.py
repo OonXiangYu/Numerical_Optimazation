@@ -201,12 +201,6 @@ def checkSummerShutdown(weekends):
 
     return False
 
-# will go through the genetic code of this child and will make sure that all the required weekends are in it.
-# it's highly likely that with crossover that there will be weekends missing and others duplicated. we will
-# randomly replace the duplicated ones with the missing ones
-def childGeneticCodeFix(child):
-    pass
-
 # function that will take in the set of rows and will convert the given row index into floating point values
 # this assumes the header in the CSV file is still present so it will skip the first column
 def convertRowToFloat(rows, row_index):
@@ -219,26 +213,6 @@ def try_convert(value): # try to convert it to float
         except ValueError:
             return value
 
-# function that will generate a shuffled itinerary. However, this will make sure that the bahrain, abu dhabi, and monaco
-# will retain their fixed weeks in the calendar
-def generateShuffledItinerary(weekends):
-
-    weekends.clear() # clear original week
-
-    fixedWeek = {9,21,49}
-
-    allWeek = [week for week in range(9,50) if week not in fixedWeek]
-
-    weekends = list(fixedWeek)
-
-    while len(weekends) < 22:
-        week = random.choice(allWeek)
-        weekends.append(week)
-        allWeek.remove(week)
-
-    return sorted(weekends)
-
-    
 # function that will use the haversine formula to calculate the distance in Km given two latitude/longitude pairs
 # it will take in an index to two rows, and extract the latitude and longitude before the calculation.
 def haversine(rows, location1, location2):
@@ -261,11 +235,19 @@ def haversine(rows, location1, location2):
 
 # function that will give us the index of the highest temp above max. will return -1 if none found
 def indexHighestTemp(tracks, weekends, max):
-    pass
+    for i in range(23):
+        tracks[weekends[i] +4][i] > max
+        return i
+    
+    return -1
 
 # function that will give us the index of the lowest temp below min. will return -1 if none found
 def indexLowestTemp(tracks, weekends, min):
-    pass
+    for i in range(23):
+        tracks[weekends[i] +4][i] < min
+        return i
+    
+    return -1
 
 # prints out the itinerary that was generated on a weekend by weekend basis starting from the preaseason test
 def printItinerary(tracks, weekends, home):
@@ -278,8 +260,6 @@ def printItinerary(tracks, weekends, home):
     for week in weekends:
         if len(allWeek) > week:
             allWeek[week - 1] = week
-
-    print(allWeek)
 
     for week in allWeek:
         if week == None:
@@ -360,40 +340,274 @@ def readTrackLocations():
 
     return rows
 
-# function that performs a roulette wheel randomisation on the two given values and returns the chosen on
-def rouletteWheel(a, b):
-    pass
-
 # function that will run the simulated annealing case for shortening the distance seperately for both silverstone and monza
 class SAcases(Annealer):
-    def __init__(self, cities, tracks, weekend, home):
-        self.cities = cities
+    def __init__(self, tracks, weekend, home):
         self.tracks = tracks
-        self.weekend = weekend
         self.home = home
-        super(SAcases,self).__init__(cities)
+        super(SAcases,self).__init__(weekend)
+
+    def dontMoveMonaco(self, a, b):
+        return self.state[a] != 21 and self.state[b] != 21
 
     def move(self):
-        a = random.randint(0, len(self.state) - 1)
-        b = random.randint(0, len(self.state) - 1)
+
+        a = random.randint(1, len(self.state) - 2) 
+        b = random.randint(1, len(self.state) - 2)# Bahrain start, Abu Dhabi Close
+
+        while not self.dontMoveMonaco(a, b): # don't move Monaco
+            a = random.randint(1, len(self.state) - 2)
+            b = random.randint(1, len(self.state) - 2) 
+
         temp = self.state[a]
         self.state[a] = self.state[b]
         self.state[b] = temp
 
     def energy(self):
-        # Reorder `self.tracks` columns according to `self.state`
-        reordered_tracks = [[row[i] for i in self.state] for row in self.tracks]
+        # Get the sorted order of weekends
+        sorted_indices = sorted(range(len(self.state)), key=lambda i: self.state[i])
 
-        total = calculateSeasonDistance(reordered_tracks, self.weekend, self.home)
+        # Sort weekends based on the order
+        sorted_weekend = [self.state[i] for i in sorted_indices]
+        #print(sorted_weekend)
+
+        # Sort tracks based on the same order
+        sorted_tracks = [[row[i] for i in sorted_indices] for row in self.tracks]
+
+        #print(sorted_tracks)
+
+        total = calculateSeasonDistance(sorted_tracks, sorted_weekend, self.home)
+
+        if checkTemperatureConstraint(sorted_tracks,sorted_weekend,15,35) == False:
+            total += 100000
+
         return total
 
 # function that will run the genetic algorithms cases for all four situations
-def GAcases():
-    pass
+# function that will generate a shuffled itinerary. However, this will make sure that the bahrain, abu dhabi, and monaco
+# will retain their fixed weeks in the calendar
+def generateShuffledItinerary(weekends, numParticle):
+
+    fixed_indices = [0, 7, 23]  # Bahrain, Monaco, Abu Dhabi
+
+    itineraries = []
+
+    for _ in range(numParticle):
+        temp_itinerary = copy.deepcopy(weekends)
+
+        shuffle_weeks = [temp_itinerary[i] for i in range(len(temp_itinerary)) if i not in fixed_indices]
+
+        random.shuffle(shuffle_weeks)
+
+        shuffled_itinerary = []
+        shuffle_iter = iter(shuffle_weeks)
+
+        for index in range(len(temp_itinerary)):
+            if index in fixed_indices:
+                shuffled_itinerary.append(temp_itinerary[index])
+            else:
+                shuffled_itinerary.append(next(shuffle_iter))
+
+        # Store shuffled results
+        itineraries.append(shuffled_itinerary)
+
+    return itineraries
+
+def countGreaterEqual(array, value):
+    count = 0
+    for i in array:
+        if i >= value:
+            count += 1
+
+    return count
+
+def swapIndexes(particle):
+    swapList = []
+
+    for i in range(len(particle)):
+        if particle[i] >= 0.5:
+            swapList.append(i)
+
+    return swapList
+
+def swapElement(itinerary, particle):
+    toSwap = countGreaterEqual(particle, 0.5)
+
+    if toSwap == 0:
+        return
+
+    swapIndex = swapIndexes(particle)
+    
+    fixed_indices = {0, 7, len(itinerary) - 1} # don't swap Bahrain,Monaco and Abu Dhabi
+    swapIndex = [idx for idx in swapIndex if idx not in fixed_indices]
+
+    if toSwap == 1:
+        if indexLowestTemp(tracks,itinerary,15) != -1:
+            other = indexLowestTemp(tracks,itinerary,15)
+            temp = itinerary[other]
+            itinerary[swapIndex[0]] = temp
+        elif indexHighestTemp(tracks,itinerary,35) != -1:
+            other = indexHighestTemp(tracks,itinerary,35)
+            temp = itinerary[other]
+            itinerary[swapIndex[0]] = temp
+        else:
+            other = random.choice([i for i in range(1, len(itinerary) - 1) if i != 7]) # no Bahrain,Monaco and Abu Dhabi
+            temp = itinerary[other]
+            itinerary[swapIndex[0]] = temp
+    else:
+        elements = []
+        for i in range(len(swapIndex)):
+            elements.append( itinerary[swapIndex[i]])
+
+        random.shuffle(elements)
+        for i in range(len(swapIndex)):
+            itinerary[swapIndex[i]] = elements[i]
+
+def PSOcases(particles):
+    global bestCost
+    global bestItinerary
+    global bestWeek
+
+    cost = []
+
+    for i in range(len(particles)):
+        swapElement(itineraries[i], particles[i])
+        sorted_indices = sorted(range(len(itineraries[i])), key=lambda j: itineraries[i][j])  # Get the sorted order of weekends
+        sorted_weekend = [itineraries[i][j] for j in sorted_indices]  # Sort weekends based on the order
+
+        # Debug the associated tracks if necessary
+        sorted_tracks = [[row[j] for j in sorted_indices] for row in tracks] 
+        total = calculateSeasonDistance(sorted_tracks,sorted_weekend,11)
+        if checkTemperatureConstraint(sorted_tracks,sorted_weekend,15,35) == False:
+            total += 100000
+        cost.append(total)
+
+    if total < bestCost:
+        bestCost = total
+        bestItinerary = sorted_tracks
+        bestWeek = sorted_weekend
+
+    return cost
 
 # function that will run particle swarm optimisation in an attempt to find a solution
-def PSOcases():
-    pass
+CXPB = 0.5
+MUTPB = 0.2
+
+# will go through the genetic code of this child and will make sure that all the required weekends are in it.
+# it's highly likely that with crossover that there will be weekends missing and others duplicated. we will
+# randomly replace the duplicated ones with the missing ones
+def childGeneticCodeFix(child, race):
+        
+    new_arr = [element for element in race if element not in child.weekend] # those week not in child
+    empty = []
+
+    for i in range(len(child.weekend)):
+        if child.weekend[i] not in empty:
+            empty.append(child.weekend[i])
+        else:
+            child.weekend[i] = new_arr[0]
+            new_arr.pop(0)
+                
+    return child
+
+class GAcases():
+
+    def __init__(self):
+        self.race = [9,10,12,14,16,18,20,21,23,25,26,27,29,30,34,35,37,38,42,43,44,47,48,49]
+        self.weekend = self.race
+
+    def randomise(self):
+        fixed_indices = [0, 7, 23]  # Bahrain, Monaco, Abu Dhabi
+
+        itineraries = []
+
+        shuffle_weeks = [self.weekend[i] for i in range(len(self.weekend)) if i not in fixed_indices]
+
+        random.shuffle(shuffle_weeks)
+
+        shuffled_itinerary = []
+        shuffle_iter = iter(shuffle_weeks)
+
+        for index in range(len(self.weekend)):
+            if index in fixed_indices:
+                shuffled_itinerary.append(self.weekend[index])
+            else:
+                shuffled_itinerary.append(next(shuffle_iter))
+
+        # Store shuffled results
+        itineraries.append(shuffled_itinerary)
+
+        return itineraries
+
+def initF1Individual(ind_class):
+    ind = ind_class()
+    ind.randomise()
+    return ind
+
+def crossoverF1(ind1, ind2):
+
+    child1 = GAcases()
+    child2 = GAcases()
+    child1.weekend.clear()
+    child2.weekend.clear()
+
+    fixed_indices = {0, 7, 23} # dont move Bahrain, Monaco, Abu Dhabi
+
+    half = int(len((ind1.weekend)) / 2)
+    for i in range(len(ind1.weekend)):
+        if i in fixed_indices: 
+            child1.weekend.append(ind1.weekend[i])
+            child2.weekend.append(ind2.weekend[i])
+        elif i < half:
+            child1.weekend.append(ind1.weekend[i])
+            child2.weekend.append(ind2.weekend[i])
+        else:
+            child1.weekend.append(ind2.weekend[i])
+            child2.weekend.append(ind1.weekend[i])
+
+    #child1 = childGeneticCodeFix(child1, race)
+    #child2 = childGeneticCodeFix(child2, race)
+
+    return (child1, child2)
+
+def mutateF1(individual, indpb):
+
+    for i in range (len(individual.weekend)):
+        if i in {0,7,23}: # Bahrain, Monaco, Abu Dhabi
+            continue
+        elif random.random() < indpb:
+            individual.weekend[i] = race[random.randint(0,23)]
+
+    # function that performs a roulette wheel randomisation on the two given values and returns the chosen on
+    def rouletteWheel(a, b):
+        pass
+
+def evaluateDistance(individual):
+
+    if len(individual.weekend) != 24:
+        return 1000000,
+
+    for i in race:
+        if i not in individual.weekend:
+            return 1000000,
+
+    # Get the sorted order of weekends
+    sorted_indices = sorted(range(len(individual.weekend)), key=lambda i: individual.weekend[i])
+
+    # Sort weekends based on the order
+    sorted_weekend = [individual.weekend[i] for i in sorted_indices]
+    #print(sorted_weekend)
+
+    # Sort tracks based on the same order
+    sorted_tracks = [[row[i] for i in sorted_indices] for row in tracks]
+
+    total = 0
+    total += calculateSeasonDistance(sorted_tracks,sorted_weekend,11)
+
+    if checkTemperatureConstraint(sorted_tracks,sorted_weekend,15,35) == False: #penalty
+        total += 100000
+        
+    return total,
 
 if __name__ == '__main__':
     # uncomment this run all the unit tests. when you have satisfied all the unit tests you will have a working simulation
@@ -406,23 +620,107 @@ if __name__ == '__main__':
     #print(race)
     tracks = readTrackLocations()
     #printItinerary(tracks, race, 11)
-    cities = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]
 
     # run the cases for simulated annealing
-    #SAcases()
-    SA = SAcases( cities, tracks, race, 11)
+    '''
+    SA = SAcases(tracks, race, 11)
     SA.steps = 100000
 
     state, e =  SA.anneal()
 
+    sorted_indices = sorted(range(len(state)), key=lambda i: state[i])
+    sorted_tracks = [[row[i] for i in sorted_indices] for row in tracks]
+    sorted_weekend = [state[i] for i in sorted_indices]
+
     print("Best route is :")
-    for i in range(0, len(state)):
-        print(tracks[0][state[i]])
+    for index, i in enumerate(sorted_indices):
+        print(sorted_weekend[index] , " : ", tracks[0][i], " : ", tracks[sorted_weekend[index] + 4][i]) 
 
     print("total : ", e)
+    #printItinerary(sorted_tracks, sorted_weekend, 11)
+    '''
 
     # run the cases for genetic algorithms
-    #GAcases()
+    
+    creator.create("Fitness", base.Fitness, weights=(-1.0,))
+    creator.create("Individual", GAcases, fitness=creator.Fitness)
+
+    toolbox = base.Toolbox()
+
+    toolbox.register("individual", initF1Individual, creator.Individual)
+    toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+    toolbox.register("evaluate", evaluateDistance)
+    toolbox.register("mate", crossoverF1)
+    toolbox.register("mutate", mutateF1, indpb=0.05)
+    toolbox.register("select", tools.selTournament, tournsize=3)
+
+    pop = toolbox.population(n=300)
+    fitnesses = list(map(toolbox.evaluate, pop))
+
+    for ind, fit in zip(pop, fitnesses):
+        ind.fitness.values = fit
+
+    generation = 0
+    while generation < 3:
+        generation += 1
+        print("====Generation %i ====" % generation)
+
+        parents = toolbox.select(pop, len(pop))
+
+        offspring = list(map(toolbox.clone, parents))
+
+        for child1, child2 in zip(offspring[::2], offspring[1::2]):
+
+            if random.random() < CXPB:
+                toolbox.mate(child1, child2)
+                del child1.fitness.values
+                del child2.fitness.values
+                #print(child1.weekend, " : ", child2.weekend)
+
+        for mutant in offspring:
+            if random.random() < MUTPB:
+                toolbox.mutate(mutant)
+                del mutant.fitness.values
+                #print(mutant.weekend)
+
+        for individual in offspring:
+            if not individual.fitness.valid:
+                print(individual.weekend)
+                individual.fitness.values = toolbox.evaluate(individual)
+
+        pop[:] = offspring
+
+        fits = [ind.fitness.values[0] for ind in pop]
+        length = len(pop)
+        mean = sum(fits) / length
+        sum2 = sum(x*x for x in fits)
+        std = abs(sum2 / length - mean ** 2) ** 0.5
+
+        print(' Min: ', min(fits))
+        print(' Max: ', max(fits))
+        print(' Avg:', mean)
+        print(' Std: ', std)
+    
 
     # run the cases for particle swarm optimisation
-    #PSOcases()
+    '''
+    bestCost = 1000000
+    options = {'w' : 0.9, 'c1' : 0.5, 'c2' : 0.3}
+
+    numParticles = 100
+
+    constraints24D = (np.array([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]),
+                      np.array([1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]))
+    
+    itineraries = generateShuffledItinerary(race, numParticles)
+    
+    optimiser = ps.single.GlobalBestPSO(n_particles=numParticles, dimensions=24, options=options, bounds=constraints24D)
+    bestCost, bestPosition = optimiser.optimize(PSOcases, iters = 1000)
+
+    #for i in range (23):
+    #   print("week ", bestWeek[i], " : ", bestItinerary[i])
+    printItinerary(bestItinerary, bestWeek, 11)
+
+    print("total distance : ",bestCost)
+    '''
+    
