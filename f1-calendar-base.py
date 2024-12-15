@@ -235,19 +235,31 @@ def haversine(rows, location1, location2):
 
 # function that will give us the index of the highest temp above max. will return -1 if none found
 def indexHighestTemp(tracks, weekends, max):
+
+    list = []
+
     for i in range(23):
         tracks[weekends[i] +4][i] > max
-        return i
+        list.append(i)
     
-    return -1
+    if len(list) == 0:
+        return -1
+    else:
+        return list
 
 # function that will give us the index of the lowest temp below min. will return -1 if none found
 def indexLowestTemp(tracks, weekends, min):
+    list = []
+
     for i in range(23):
         tracks[weekends[i] +4][i] < min
-        return i
+        list.append(i)
     
-    return -1
+    if len(list) == 0:
+        return -1
+    else:
+        return list
+
 
 # prints out the itinerary that was generated on a weekend by weekend basis starting from the preaseason test
 def printItinerary(tracks, weekends, home):
@@ -443,16 +455,19 @@ def swapElement(itinerary, particle):
 
     if toSwap == 1:
         if indexLowestTemp(tracks,itinerary,15) != -1:
-            other = indexLowestTemp(tracks,itinerary,15)
+            other = indexLowestTemp(tracks,itinerary,15)[0]
             temp = itinerary[other]
+            itinerary[other] = itinerary[swapIndex[0]]
             itinerary[swapIndex[0]] = temp
         elif indexHighestTemp(tracks,itinerary,35) != -1:
-            other = indexHighestTemp(tracks,itinerary,35)
+            other = indexHighestTemp(tracks,itinerary,35)[0]
             temp = itinerary[other]
+            itinerary[other] = itinerary[swapIndex[0]]
             itinerary[swapIndex[0]] = temp
         else:
             other = random.choice([i for i in range(1, len(itinerary) - 1) if i != 7]) # no Bahrain,Monaco and Abu Dhabi
             temp = itinerary[other]
+            itinerary[other] = itinerary[swapIndex[0]]
             itinerary[swapIndex[0]] = temp
     else:
         elements = []
@@ -462,6 +477,7 @@ def swapElement(itinerary, particle):
         random.shuffle(elements)
         for i in range(len(swapIndex)):
             itinerary[swapIndex[i]] = elements[i]
+
 
 def PSOcases(particles):
     global bestCost
@@ -513,31 +529,16 @@ def childGeneticCodeFix(child, race):
 class GAcases():
 
     def __init__(self):
-        self.race = [9,10,12,14,16,18,20,21,23,25,26,27,29,30,34,35,37,38,42,43,44,47,48,49]
-        self.weekend = self.race
+        self.weekend = [9,10,12,14,16,18,20,21,23,25,26,27,29,30,34,35,37,38,42,43,44,47,48,49]
 
     def randomise(self):
-        fixed_indices = [0, 7, 23]  # Bahrain, Monaco, Abu Dhabi
+        subarray_to_shuffle = self.weekend[1:7] + self.weekend[8:23]
 
-        itineraries = []
+        # Shuffle the subarray
+        random.shuffle(subarray_to_shuffle)
 
-        shuffle_weeks = [self.weekend[i] for i in range(len(self.weekend)) if i not in fixed_indices]
-
-        random.shuffle(shuffle_weeks)
-
-        shuffled_itinerary = []
-        shuffle_iter = iter(shuffle_weeks)
-
-        for index in range(len(self.weekend)):
-            if index in fixed_indices:
-                shuffled_itinerary.append(self.weekend[index])
-            else:
-                shuffled_itinerary.append(next(shuffle_iter))
-
-        # Store shuffled results
-        itineraries.append(shuffled_itinerary)
-
-        return itineraries
+        self.weekend[1:7] = subarray_to_shuffle[:6]
+        self.weekend[8:-1] = subarray_to_shuffle[6:]
 
 def initF1Individual(ind_class):
     ind = ind_class()
@@ -547,40 +548,42 @@ def initF1Individual(ind_class):
 def crossoverF1(ind1, ind2):
 
     child1 = GAcases()
-    child2 = GAcases()
     child1.weekend.clear()
-    child2.weekend.clear()
 
     fixed_indices = {0, 7, 23} # dont move Bahrain, Monaco, Abu Dhabi
 
-    half = int(len((ind1.weekend)) / 2)
     for i in range(len(ind1.weekend)):
         if i in fixed_indices: 
             child1.weekend.append(ind1.weekend[i])
-            child2.weekend.append(ind2.weekend[i])
-        elif i < half:
-            child1.weekend.append(ind1.weekend[i])
-            child2.weekend.append(ind2.weekend[i])
         else:
-            child1.weekend.append(ind2.weekend[i])
-            child2.weekend.append(ind1.weekend[i])
+            child1.weekend.append(rouletteWheel(ind1.weekend[i], ind2.weekend[i]))
 
-    #child1 = childGeneticCodeFix(child1, race)
-    #child2 = childGeneticCodeFix(child2, race)
+    child1 = childGeneticCodeFix(child1, race)
 
-    return (child1, child2)
+    return (child1)
+
+# function that performs a roulette wheel randomisation on the two given values and returns the chosen on
+def rouletteWheel(a, b):
+
+    if random.random() < 0.5:
+        return a
+    else: 
+        return b
 
 def mutateF1(individual, indpb):
 
-    for i in range (len(individual.weekend)):
-        if i in {0,7,23}: # Bahrain, Monaco, Abu Dhabi
-            continue
-        elif random.random() < indpb:
-            individual.weekend[i] = race[random.randint(0,23)]
-
-    # function that performs a roulette wheel randomisation on the two given values and returns the chosen on
-    def rouletteWheel(a, b):
-        pass
+        if(indexLowestTemp(tracks,individual.weekend,15) != -1):
+            cooldest = indexLowestTemp(tracks,individual.weekend,15)
+            for i in range(len(cooldest)):
+                individual.weekend[i] = random.choice([i for i in range(1, len(race) - 1) if i != 7])
+        elif(indexHighestTemp(tracks,individual.weekend,35) != -1):
+            hottest = indexHighestTemp(tracks,individual.weekend,35) != -1
+            for i in range(len(hottest)):
+                individual.weekend[i] = random.choice([i for i in range(1, len(race) - 1) if i != 7])
+        else:
+            for i in range(len(individual.weekend)):
+                if random.random() < indpb:
+                    individual.weekend[i] = random.choice([i for i in range(1, len(race) - 1) if i != 7])
 
 def evaluateDistance(individual):
 
@@ -613,7 +616,7 @@ if __name__ == '__main__':
     # uncomment this run all the unit tests. when you have satisfied all the unit tests you will have a working simulation
     # you can then comment this out and move onto your SA and GA solutions
     #unittest.main()
-
+    
     # just to check that the itinerary printing mechanism works. we will assume that silverstone is the home track for this
     race = readRaceWeekends()
     #race = generateShuffledItinerary(weekends)
@@ -632,7 +635,7 @@ if __name__ == '__main__':
     sorted_tracks = [[row[i] for i in sorted_indices] for row in tracks]
     sorted_weekend = [state[i] for i in sorted_indices]
 
-    print("Best route is :")
+    print("\nBest route is :")
     for index, i in enumerate(sorted_indices):
         print(sorted_weekend[index] , " : ", tracks[0][i], " : ", tracks[sorted_weekend[index] + 4][i]) 
 
@@ -661,9 +664,9 @@ if __name__ == '__main__':
         ind.fitness.values = fit
 
     generation = 0
-    while generation < 3:
+    while generation < 1000:
         generation += 1
-        print("====Generation %i ====" % generation)
+        #print("====Generation %i ====" % generation)
 
         parents = toolbox.select(pop, len(pop))
 
@@ -685,7 +688,7 @@ if __name__ == '__main__':
 
         for individual in offspring:
             if not individual.fitness.valid:
-                print(individual.weekend)
+                #print(individual.weekend)
                 individual.fitness.values = toolbox.evaluate(individual)
 
         pop[:] = offspring
@@ -701,7 +704,7 @@ if __name__ == '__main__':
         print(' Avg:', mean)
         print(' Std: ', std)
     
-
+    
     # run the cases for particle swarm optimisation
     '''
     bestCost = 1000000
