@@ -141,24 +141,26 @@ class UnitTests (unittest.TestCase):
 # - for the summer shutdown and off season the team will return home
 def calculateSeasonDistance(tracks, weekends, home):
 
-    i = 0
+    race = [9,10,12,14,16,18,20,21,23,25,26,27,29,30,34,35,37,38,42,43,44,47,48,49]
+
     current = home
     total = 0
     j = 0
     
-    for week in weekends:
-        total  += haversine(tracks, current, i)
-        current = i
 
-        if j + 1 < len(weekends) and weekends[j + 1] == week + 1: # if double/triper header
-            i += 1
+    for week in race:
+        idx = weekends.index(week)
+
+        total  += haversine(tracks, current, idx)
+        current = idx
+
+        if j + 1 < len(race) and race[j + 1] == week + 1: # if double/triper header
             j += 1
             continue
         else:
             total += haversine(tracks, current, home) 
             current = home
 
-        i += 1
         j += 1
 
 
@@ -235,30 +237,25 @@ def haversine(rows, location1, location2):
 
 # function that will give us the index of the highest temp above max. will return -1 if none found
 def indexHighestTemp(tracks, weekends, max):
-
-    list = []
+    hot = max
+    idx = -1
 
     for i in range(23):
-        tracks[weekends[i] +4][i] > max
-        list.append(i)
+        if tracks[weekends[i] +4][i] > max and tracks[weekends[i] +4][i] > hot:
+            idx = i
     
-    if len(list) == 0:
-        return -1
-    else:
-        return list
+    return idx
 
 # function that will give us the index of the lowest temp below min. will return -1 if none found
 def indexLowestTemp(tracks, weekends, min):
-    list = []
+    cold = min
+    idx = -1
 
     for i in range(23):
-        tracks[weekends[i] +4][i] < min
-        list.append(i)
-    
-    if len(list) == 0:
-        return -1
-    else:
-        return list
+        if tracks[weekends[i] +4][i] < min and tracks[weekends[i] +4][i]  < cold: 
+            idx = i
+
+    return idx
 
 
 # prints out the itinerary that was generated on a weekend by weekend basis starting from the preaseason test
@@ -359,16 +356,21 @@ class SAcases(Annealer):
         self.home = home
         super(SAcases,self).__init__(weekend)
 
-    def dontMoveMonaco(self, a, b):
-        return self.state[a] != 21 and self.state[b] != 21
-
     def move(self):
 
-        a = random.randint(1, len(self.state) - 2) 
+        if indexLowestTemp(tracks,self.state,15) != -1:
+            a = indexLowestTemp(tracks,self.state,15)
+        elif indexHighestTemp(tracks,self.state,35) != -1:
+            a = indexHighestTemp(tracks,self.state,35)
+        else:
+            a = random.randint(1, len(self.state) - 2) 
+
+            while a == 7:
+                a = random.randint(1, len(self.state) - 2) 
+
         b = random.randint(1, len(self.state) - 2)# Bahrain start, Abu Dhabi Close
 
-        while not self.dontMoveMonaco(a, b): # don't move Monaco
-            a = random.randint(1, len(self.state) - 2)
+        while b == 7: # don't move Monaco
             b = random.randint(1, len(self.state) - 2) 
 
         temp = self.state[a]
@@ -376,21 +378,10 @@ class SAcases(Annealer):
         self.state[b] = temp
 
     def energy(self):
-        # Get the sorted order of weekends
-        sorted_indices = sorted(range(len(self.state)), key=lambda i: self.state[i])
 
-        # Sort weekends based on the order
-        sorted_weekend = [self.state[i] for i in sorted_indices]
-        #print(sorted_weekend)
+        total = calculateSeasonDistance(tracks, self.state, self.home)
 
-        # Sort tracks based on the same order
-        sorted_tracks = [[row[i] for i in sorted_indices] for row in self.tracks]
-
-        #print(sorted_tracks)
-
-        total = calculateSeasonDistance(sorted_tracks, sorted_weekend, self.home)
-
-        if checkTemperatureConstraint(sorted_tracks,sorted_weekend,15,35) == False:
+        if checkTemperatureConstraint(tracks, self.state,15,35) == False:
             total += 100000
 
         return total
@@ -443,65 +434,48 @@ def swapIndexes(particle):
     return swapList
 
 def swapElement(itinerary, particle):
-    toSwap = countGreaterEqual(particle, 0.5)
+    #toSwap = countGreaterEqual(particle, 0.5)
 
-    if toSwap == 0:
-        return
+    #if toSwap == 0:
+    #    return
 
     swapIndex = swapIndexes(particle)
     
     fixed_indices = {0, 7, len(itinerary) - 1} # don't swap Bahrain,Monaco and Abu Dhabi
     swapIndex = [idx for idx in swapIndex if idx not in fixed_indices]
 
-    if toSwap == 1:
-        if indexLowestTemp(tracks,itinerary,15) != -1:
-            other = indexLowestTemp(tracks,itinerary,15)[0]
-            temp = itinerary[other]
-            itinerary[other] = itinerary[swapIndex[0]]
-            itinerary[swapIndex[0]] = temp
-        elif indexHighestTemp(tracks,itinerary,35) != -1:
-            other = indexHighestTemp(tracks,itinerary,35)[0]
-            temp = itinerary[other]
-            itinerary[other] = itinerary[swapIndex[0]]
-            itinerary[swapIndex[0]] = temp
-        else:
-            other = random.choice([i for i in range(1, len(itinerary) - 1) if i != 7]) # no Bahrain,Monaco and Abu Dhabi
-            temp = itinerary[other]
-            itinerary[other] = itinerary[swapIndex[0]]
-            itinerary[swapIndex[0]] = temp
+    if indexLowestTemp(tracks,itinerary,15) != -1:
+        other = indexLowestTemp(tracks,itinerary,15)
+        temp = itinerary[other]
+        itinerary[other] = itinerary[swapIndex[0]]
+        itinerary[swapIndex[0]] = temp
+    elif indexHighestTemp(tracks,itinerary,35) != -1:
+        other = indexHighestTemp(tracks,itinerary,35)
+        temp = itinerary[other]
+        itinerary[other] = itinerary[swapIndex[0]]
+        itinerary[swapIndex[0]] = temp
     else:
-        elements = []
-        for i in range(len(swapIndex)):
-            elements.append( itinerary[swapIndex[i]])
+        other = random.choice([i for i in range(1, len(itinerary) - 1) if i != 7]) # no Bahrain,Monaco and Abu Dhabi
+        temp = itinerary[other]
+        itinerary[other] = itinerary[swapIndex[0]]
+        itinerary[swapIndex[0]] = temp
 
-        random.shuffle(elements)
-        for i in range(len(swapIndex)):
-            itinerary[swapIndex[i]] = elements[i]
 
 
 def PSOcases(particles):
     global bestCost
-    global bestItinerary
-    global bestWeek
 
     cost = []
 
     for i in range(len(particles)):
         swapElement(itineraries[i], particles[i])
-        sorted_indices = sorted(range(len(itineraries[i])), key=lambda j: itineraries[i][j])  # Get the sorted order of weekends
-        sorted_weekend = [itineraries[i][j] for j in sorted_indices]  # Sort weekends based on the order
-
-        # Debug the associated tracks if necessary
-        sorted_tracks = [[row[j] for j in sorted_indices] for row in tracks] 
-        total = calculateSeasonDistance(sorted_tracks,sorted_weekend,11)
-        if checkTemperatureConstraint(sorted_tracks,sorted_weekend,15,35) == False:
+        total = calculateSeasonDistance(tracks,itineraries[i],11)
+        if not checkTemperatureConstraint(tracks,itineraries[i],15,35):
             total += 100000
         cost.append(total)
 
     if total < bestCost:
         bestCost = total
-        bestItinerary = sorted_tracks
-        bestWeek = sorted_weekend
 
     return cost
 
@@ -572,18 +546,15 @@ def rouletteWheel(a, b):
 
 def mutateF1(individual, indpb):
 
-        if(indexLowestTemp(tracks,individual.weekend,15) != -1):
-            cooldest = indexLowestTemp(tracks,individual.weekend,15)
-            for i in range(len(cooldest)):
-                individual.weekend[i] = random.choice([i for i in range(1, len(race) - 1) if i != 7])
-        elif(indexHighestTemp(tracks,individual.weekend,35) != -1):
-            hottest = indexHighestTemp(tracks,individual.weekend,35) != -1
-            for i in range(len(hottest)):
-                individual.weekend[i] = random.choice([i for i in range(1, len(race) - 1) if i != 7])
-        else:
-            for i in range(len(individual.weekend)):
-                if random.random() < indpb:
-                    individual.weekend[i] = random.choice([i for i in range(1, len(race) - 1) if i != 7])
+    if indexLowestTemp(tracks,individual.weekend,15) != -1:
+        other = indexLowestTemp(tracks,individual.weekend,15)
+        individual.weekend[other] = individual.weekend[random.choice([i for i in range(1, len(race) - 1) if i != 7])]
+    elif indexHighestTemp(tracks,individual.weekend,35) != -1:
+        other = indexHighestTemp(tracks,individual.weekend,35)
+        individual.weekend[other] = individual.weekend[random.choice([i for i in range(1, len(race) - 1) if i != 7])]
+    else:
+        other = random.choice([i for i in range(1, len(individual.weekend) - 1) if i != 7]) # no Bahrain,Monaco and Abu Dhabi
+        individual.weekend[other] = individual.weekend[random.choice([i for i in range(1, len(race) - 1) if i != 7])]
 
 def evaluateDistance(individual):
 
@@ -594,20 +565,10 @@ def evaluateDistance(individual):
         if i not in individual.weekend:
             return 1000000,
 
-    # Get the sorted order of weekends
-    sorted_indices = sorted(range(len(individual.weekend)), key=lambda i: individual.weekend[i])
-
-    # Sort weekends based on the order
-    sorted_weekend = [individual.weekend[i] for i in sorted_indices]
-    #print(sorted_weekend)
-
-    # Sort tracks based on the same order
-    sorted_tracks = [[row[i] for i in sorted_indices] for row in tracks]
-
     total = 0
-    total += calculateSeasonDistance(sorted_tracks,sorted_weekend,11)
+    total += calculateSeasonDistance(tracks,individual.weekend,11)
 
-    if checkTemperatureConstraint(sorted_tracks,sorted_weekend,15,35) == False: #penalty
+    if not checkTemperatureConstraint(tracks,individual.weekend,15,35): #penalty
         total += 100000
         
     return total,
@@ -666,7 +627,7 @@ if __name__ == '__main__':
     generation = 0
     while generation < 1000:
         generation += 1
-        #print("====Generation %i ====" % generation)
+        print("====Generation %i ====" % generation)
 
         parents = toolbox.select(pop, len(pop))
 
@@ -719,10 +680,6 @@ if __name__ == '__main__':
     
     optimiser = ps.single.GlobalBestPSO(n_particles=numParticles, dimensions=24, options=options, bounds=constraints24D)
     bestCost, bestPosition = optimiser.optimize(PSOcases, iters = 1000)
-
-    #for i in range (23):
-    #   print("week ", bestWeek[i], " : ", bestItinerary[i])
-    printItinerary(bestItinerary, bestWeek, 11)
 
     print("total distance : ",bestCost)
     '''
