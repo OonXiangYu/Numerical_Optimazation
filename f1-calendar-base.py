@@ -605,7 +605,7 @@ if __name__ == '__main__':
     '''
 
     # run the cases for genetic algorithms
-    
+    #'''
     creator.create("Fitness", base.Fitness, weights=(-1.0,))
     creator.create("Individual", GAcases, fitness=creator.Fitness)
 
@@ -664,7 +664,7 @@ if __name__ == '__main__':
         print(' Max: ', max(fits))
         print(' Avg:', mean)
         print(' Std: ', std)
-    
+    #'''
     
     # run the cases for particle swarm optimisation
     '''
